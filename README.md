@@ -52,6 +52,7 @@ Optional fields:
     }
   ]
 }
+```
 
 ## Credentials JSON Format
 
