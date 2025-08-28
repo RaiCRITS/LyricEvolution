@@ -1,3 +1,9 @@
+# Songs Semantic Analysis Framework
+
+This framework computes semantic similarity matrices of songs over years using multiple methods and models.
+
+---
+
 ## Songs JSON Format
 
 The dataset should be structured as a dictionary where **each key is a year** (as a string), and the value is a list of song entries for that year. Each song entry is a dictionary. The **only required fields** are:
@@ -46,3 +52,31 @@ Optional fields:
     }
   ]
 }
+
+## Credentials JSON Format
+
+The framework requires a JSON file containing API keys for the services you want to use. The structure is as follows:
+
+```json
+{
+  "openai": {
+    "api_key": "YOUR_OPENAI_API_KEY"
+  },
+  "gemini": {
+    "api_key": "YOUR_GEMINI_API_KEY"
+  }
+}
+```
+
+Note: The OpenAI API key can also be provided with Azure by specifying the API version and endpoint, for example:
+
+```json
+{
+  "openai": {
+    "api_key": "YOUR_API_KEY",
+    "api_version": "2024-06-01",
+    "azure_endpoint": "https://your-custom-endpoint.openai.azure.com/"
+  }
+}
+```
+
