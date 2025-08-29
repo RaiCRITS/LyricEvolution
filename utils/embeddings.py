@@ -24,7 +24,7 @@ def init_openai_client(credentials_file="credentials.json"):
     global client_openai
 
     with open(credentials_file, "r") as f:
-        creds = json.load(f)
+        creds = json.load(f)["openai"]
 
     api_key = creds.get("api_key")
     azure_endpoint = creds.get("azure_endpoint")
