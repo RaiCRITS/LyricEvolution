@@ -5,9 +5,9 @@ numpy==2.2.0
 scipy==1.16.2
 scikit-learn==1.6.1
 sentence-transformers==3.4.1
-transformers==4.28.1
+transformers==4.56.1
 openai==1.66.3
-colbert-ai==0.2.20
+colbert-ai==0.2.22
 google-generativeai==0.8.4
 spacy==3.7.6
 langdetect
