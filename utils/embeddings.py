@@ -125,6 +125,59 @@ def precompute_all_embeddings(songs_by_year, method="openai", embedding_model="t
 # ========================
 #  SIMILARITY MATRIX
 # ========================
+def get_similarity_percentage(year1, year2, embeddings_dict, threshold, normalize=False, exclude_diagonal=True):
+    """
+    Calculate the percentage of similarity scores above a given threshold 
+    between items of two specified years.
+
+    Parameters
+    ----------
+    year1 : int or str
+        First year to compare.
+    year2 : int or str
+        Second year to compare.
+    embeddings_dict : dict
+        Dictionary containing embeddings indexed by year.
+    threshold : float
+        Similarity threshold (0–1 range).
+    normalize : bool, optional
+        Whether to normalize embeddings before computing similarity.
+    exclude_diagonal : bool, optional
+        If True, excludes diagonal elements (self-comparisons).
+
+    Returns
+    -------
+    count_above_threshold : int
+        Number of valid similarity pairs above the threshold.
+    percentage : float
+        Proportion of valid pairs above the threshold.
+    """
+    # Ensure years are strings (to match dictionary keys)
+    #year1 = str(year1)
+    #year2 = str(year2)
+    
+    similarity_matrix, labels1, labels2 = sim_matrix_years(
+        year1, year2, embeddings_dict, 
+        normalize=normalize, 
+        exclude_diagonal=exclude_diagonal
+    )
+    
+    # Mask valid (non-NaN) values
+    valid_mask = ~np.isnan(similarity_matrix)
+    
+    # Count valid pairs above threshold
+    count_above_threshold = np.sum((similarity_matrix >= threshold) & valid_mask)
+    
+    # Count total valid pairs
+    total_valid_pairs = np.sum(valid_mask)
+    
+    if total_valid_pairs == 0:
+        return 0, 0.0
+    
+    percentage = count_above_threshold / total_valid_pairs
+    
+    return int(count_above_threshold), float(percentage)
+
 def sim_matrix_years(year1, year2, dict_emb_songs, normalize=False, exclude_diagonal=True):
     #year1, year2 = str(year1), str(year2)
 
