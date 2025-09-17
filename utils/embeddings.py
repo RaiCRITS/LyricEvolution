@@ -73,7 +73,7 @@ def precompute_all_embeddings(songs_by_year, method="openai", embedding_model="t
 
         # Convert lists to numpy arrays
         for year in embeddings_cache:
-            embeddings_cache[year]["embeddings"] = np.array(embeddings_cache[year_str]["embeddings"])
+            embeddings_cache[year]["embeddings"] = np.array(embeddings_cache[year]["embeddings"])
         return embeddings_cache
 
     elif method == "sentence_transformers":
@@ -86,7 +86,7 @@ def precompute_all_embeddings(songs_by_year, method="openai", embedding_model="t
                 embeddings_cache[year]["embeddings"].append(model_st.encode(el['text']))
 
         for year in embeddings_cache:
-            embeddings_cache[year]["embeddings"] = np.array(embeddings_cache[year_str]["embeddings"])
+            embeddings_cache[year]["embeddings"] = np.array(embeddings_cache[year]["embeddings"])
         return embeddings_cache
 
     elif method == "colbert":
