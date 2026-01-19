@@ -9,20 +9,6 @@ import spacy
 from sklearn.metrics.pairwise import cosine_similarity
 from langdetect import detect
 
-
-
-def normalize_with_gemini(text, api_key):
-    prompt = f"""
-    Here is a text: ***{text}***.
-    Normalize it:
-    - lowercase all words
-    - verbs in infinitive
-    - nouns/adjectives singular
-    - return ONLY the normalized text in triple stars (***)
-    """
-    response = query_gemini(prompt, api_key)
-    return extract_normalized_text(response)
-
 # =========================
 #  SPAcY MODEL LOADER (Large if available)
 # =========================
