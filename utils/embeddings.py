@@ -231,10 +231,11 @@ def get_sim_matrix_years_values(embeddings,years):
     all_values = dict()
 
     # Step 1: collect all similarity values
-    for y in tqdm(years, desc="Collecting similarity values"):
-        for y2 in range(y, max(years)+1):
+    for y in tqdm(years):
+        for y2 in years:
             sim_matrix, _, _ = sim_matrix_years(y, y2, embeddings, normalize=False, exclude_diagonal=y==y2)
             all_values[(y,y2)] = sim_matrix
+            all_values[(y2,y)] = sim_matrix
     return all_values
 
 
@@ -281,7 +282,7 @@ def semantic_similarity_over_time_mean(sim_years_values, years, normalize=True):
     for y1 in tqdm(years, desc="Computing mean similarity per year"):        
         row = []
         for y2 in years:
-            sim = np.nanmean(sim_years_values[y1,y2])    
+            sim = np.nanmean(sim_years_values[(y1,y2)])    
             row.append(sim)
         mean_matrix.append(row)
 
@@ -304,7 +305,7 @@ def semantic_similarity_over_time_median(sim_years_values, years=range(1951, 202
     for y1 in tqdm(years, desc="Computing mean similarity per year"):        
         row = []
         for y2 in years:
-            sim = np.nanmedian(sim_years_values[y1,y2])    
+            sim = np.nanmedian(sim_years_values[(y1,y2)])    
             row.append(sim)
         median_matrix.append(row)
 
@@ -324,6 +325,8 @@ def precompute_all_embeddings_portions(song_portions_dict, method="openai", embe
     method: "openai" | "sentence_transformers" | "colbert"
     """
     if method == "openai":
+        global OPENAI_EMBEDDING_MODEL
+        embedding_model=OPENAI_EMBEDDING_MODEL
         if client_openai is None:
             raise RuntimeError("You must provide an initialized OpenAI/Azure client.")
 
