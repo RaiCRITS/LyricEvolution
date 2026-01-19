@@ -126,9 +126,6 @@ print("\n=== Computing topic matrices ===")
 topic_matrices = compute_all_text_matrices(songs_by_year_topics)
 
 
-
-wrd_utils.init_gemini_client(CREDENTIALS_FILE)
-
 def compute_all_words_matrices(songs_by_year_list):
     all_wd_similarities = wrd_utils.precompute_all_similarities(songs_by_year_list)
     methods = [
