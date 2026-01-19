@@ -8,46 +8,8 @@ import numpy as np
 import spacy
 from sklearn.metrics.pairwise import cosine_similarity
 from langdetect import detect
-import google.generativeai as genai
 
-# =========================
-#  GEMINI & NORMALIZATION
-# =========================
-# Variabile globale per il client
-_GEMINI_API_KEY = None
 
-def init_gemini_client(credentials_file):
-    """
-    Inizializza il client Gemini leggendo la chiave dal file di credenziali JSON.
-    Il file deve contenere {"api_key": "..."}.
-    """
-    global _GEMINI_API_KEY
-    with open(credentials_file, "r") as f:
-        creds = json.load(f)
-    _GEMINI_API_KEY = creds.get("api_key")
-    if not _GEMINI_API_KEY:
-        raise ValueError("API key not found in credentials file")
-    
-    # Configura il client con la chiave
-    genai.configure(api_key=_GEMINI_API_KEY)
-    print("Gemini client initialized.")
-
-def query_gemini(prompt, model_name="gemini-1.5-flash"):
-    """
-    Fa una richiesta al modello Gemini usando la chiave inizializzata.
-    """
-    if _GEMINI_API_KEY is None:
-        raise RuntimeError("Gemini client not initialized. Call init_gemini_client() first.")
-    
-    full_model_name = f"models/{model_name}"
-    model = genai.GenerativeModel(model_name=full_model_name)
-    response = model.generate_content([prompt], request_options={"timeout": 600})
-    return response.text
-
-    
-def extract_normalized_text(response):
-    match = re.search(r"\*\*\*(.*?)\*\*\*", response, re.DOTALL)
-    return match.group(1).strip() if match else ""
 
 def normalize_with_gemini(text, api_key):
     prompt = f"""
@@ -93,10 +55,7 @@ def load_spacy_model_for_text(text):
 # =========================
 #  PREPROCESS
 # =========================
-def preprocess(text, nlp, remove_duplicates=False, normalize=False, api_key=None):
-    if normalize:
-        text = normalize_with_gemini(text, api_key)
-
+def preprocess(text, nlp, remove_duplicates=False):
     doc = nlp(text.lower())
     tokens = [token.lemma_ for token in doc if token.pos_ in {"NOUN", "VERB", "ADJ"}]
 
@@ -107,18 +66,18 @@ def preprocess(text, nlp, remove_duplicates=False, normalize=False, api_key=None
 # =========================
 #  SIMILARITY
 # =========================
-def compute_similarity_dict(text1, text2, nlp1, nlp2, api_key):
+def compute_similarity_dict(text1, text2, text1n, text2n, nlp1, nlp2):
     variants = {
-        "no_rep_raw": preprocess(text1, nlp1, remove_duplicates=False, normalize=False),
-        "rep_raw": preprocess(text1, nlp1, remove_duplicates=True, normalize=False),
-        "no_rep_norm": preprocess(text1, nlp1, remove_duplicates=False, normalize=True, api_key=api_key),
-        "rep_norm": preprocess(text1, nlp1, remove_duplicates=True, normalize=True, api_key=api_key),
+        "no_rep_raw": preprocess(text1, nlp1, remove_duplicates=False),
+        "rep_raw": preprocess(text1, nlp1, remove_duplicates=True),
+        "no_rep_norm": preprocess(text1n, nlp1, remove_duplicates=False),
+        "rep_norm": preprocess(text1n, nlp1, remove_duplicates=True),
     }
     variants2 = {
         "no_rep_raw": preprocess(text2, nlp2, remove_duplicates=False, normalize=False),
         "rep_raw": preprocess(text2, nlp2, remove_duplicates=True, normalize=False),
-        "no_rep_norm": preprocess(text2, nlp2, remove_duplicates=False, normalize=True, api_key=api_key),
-        "rep_norm": preprocess(text2, nlp2, remove_duplicates=True, normalize=True, api_key=api_key),
+        "no_rep_norm": preprocess(text2n, nlp2, remove_duplicates=False),
+        "rep_norm": preprocess(text2n, nlp2, remove_duplicates=True),
     }
 
     results = {}
@@ -138,6 +97,7 @@ def precompute_all_similarities(texts_by_year, api_key):
     similarities_all = {}
     titles = []
     texts = []
+    textsn = []
 
     text_nlp = dict()
 
@@ -145,6 +105,7 @@ def precompute_all_similarities(texts_by_year, api_key):
         for e in entries:
             titles.append(e["title"]+" "+str(year))
             texts.append(e["text"])
+            textsn.append(e["normalized_text"])
             for t in texts:
               if t not in text_nlp:
                 text_nlp[t] = load_spacy_model_for_text(t)
@@ -154,7 +115,8 @@ def precompute_all_similarities(texts_by_year, api_key):
     for (i, t1), (j, t2) in tqdm(combinations(enumerate(texts), 2)):
         key = (titles[i], titles[j])
         key_rev = (titles[j], titles[i])
-        sim_dict = compute_similarity_dict(t1, t2, text_nlp[t1], text_nlp[t2], api_key=api_key)
+        t1n, t2n = textsn[i], textsn[j]
+        sim_dict = compute_similarity_dict(t1, t2, t1n, t2n, text_nlp[t1], text_nlp[t2])
         similarities_all[key] = sim_dict
         similarities_all[key_rev] = sim_dict  # simmetria
     return similarities_all
