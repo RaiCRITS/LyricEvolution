@@ -7,6 +7,7 @@ from utils import words as wrd_utils
 from tqdm import tqdm
 import argparse
 import copy
+import json
 
 # ===========================
 #  PARSE ARGUMENTS
@@ -21,12 +22,21 @@ CREDENTIALS_FILE = args.credentials
 SONGS_FILE = args.songs_file
 OUTPUT_DIR = args.output_dir
 years = range(1951, 2026)
-methods = ["openai", "sentence_transformers", "colbert"]
+methods = ["sentence_transformers", "colbert"]
 
-# ===========================
-#  INIT OPENAI/AZURE CLIENT
-# ===========================
-emb_utils.init_openai_client(CREDENTIALS_FILE)
+flag_openai = False
+
+with open(CREDENTIALS_FILE) as f:
+    o = json.load(f)
+    os.environ["HF_TOKEN"] = o["hf_token"]
+    # ===========================
+    #  INIT OPENAI/AZURE CLIENT
+    # ===========================
+    flag_openai = "openai" in o
+    
+if flag_openai:
+    emb_utils.init_openai_client(CREDENTIALS_FILE)
+    methos = ["openai"] + methods
 
 # ===========================
 #  LOAD SONGS DATA
@@ -34,18 +44,24 @@ emb_utils.init_openai_client(CREDENTIALS_FILE)
 with open(SONGS_FILE, "r", encoding="utf-8") as f:
     songs_by_year_list = json.load(f)
 
+for k in list(songs_by_year_list.keys()):
+  songs_by_year_list[int(k)] = songs_by_year_list[k]
+  if str(k) in songs_by_year_list:
+    del songs_by_year_list[str(k)]
+
+
+years = [int(k) for k in list(songs_by_year_list.keys())]
+
 # Prepare dictionaries for portion-level computations
-songs_by_year_dict = {str(year): [] for year in years}
+songs_by_year_dict = {int(year): [] for year in years}
 song_portions_dict = {}
 
 for year, entries in songs_by_year_list.items():
-    year = str(year)
+    year = int(year)
     for el in entries:
         song_title = el['song']                # updated key
         songs_by_year_dict[year].append(song_title)
-        song_portions_dict[song_title] = el.get('text_segments', [])  # updated key
-
-
+        song_portions_dict[song_title] = el.get('segments', [])  # updated key
 
 # Deep copy per non modificare l'originale
 songs_by_year_topics = copy.deepcopy(songs_by_year_list)
@@ -54,6 +70,7 @@ songs_by_year_topics = copy.deepcopy(songs_by_year_list)
 for year, entries in songs_by_year_topics.items():
     for el in entries:
         el['text'] = "\n".join([t['topic_title'] for t in el['topics']])
+
 
 # ===========================
 #  FUNCTIONS TO COMPUTE MATRICES
@@ -64,14 +81,16 @@ def compute_all_text_matrices(songs_by_year_list):
         print(f"\n🔹 Computing embeddings for full texts using {method}...")
         emb_cache = emb_utils.precompute_all_embeddings(songs_by_year_list, method=method)
 
+        sim_years_values = emb_utils.get_sim_matrix_years_values(emb_cache,years)
+
         print("  → Mean matrix")
-        mean_mat = emb_utils.semantic_similarity_over_time_mean(emb_cache, years=years, normalize=True)
+        mean_mat = emb_utils.semantic_similarity_over_time_mean(sim_years_values, years=years, normalize=True)
 
         print("  → Median matrix")
-        median_mat = emb_utils.semantic_similarity_over_time_median(emb_cache, years=years, normalize=True)
+        median_mat = emb_utils.semantic_similarity_over_time_median(sim_years_values, years=years, normalize=True)
 
         print("  → Quartile matrix")
-        quartile_mat = emb_utils.semantic_similarity_over_time_quartile(emb_cache, years=years)
+        quartile_mat = emb_utils.semantic_similarity_over_time_quartile(sim_years_values, years=years)
 
         matrices[method] = {
             "mean": mean_mat,
@@ -79,6 +98,8 @@ def compute_all_text_matrices(songs_by_year_list):
             "quartile": quartile_mat
         }
     return matrices
+
+
 
 def compute_all_portion_matrices(song_portions_dict, songs_by_year_dict):
     matrices = {}
