@@ -8,6 +8,8 @@ from tqdm import tqdm
 import argparse
 import copy
 import json
+import seaborn as sns
+import matplotlib.pyplot as plt 
 
 # ===========================
 #  PARSE ARGUMENTS
@@ -21,7 +23,6 @@ args = parser.parse_args()
 CREDENTIALS_FILE = args.credentials
 SONGS_FILE = args.songs_file
 OUTPUT_DIR = args.output_dir
-years = range(1951, 2026)
 methods = ["sentence_transformers", "colbert"]
 
 flag_openai = False
@@ -29,14 +30,11 @@ flag_openai = False
 with open(CREDENTIALS_FILE) as f:
     o = json.load(f)
     os.environ["HF_TOKEN"] = o["hf_token"]
-    # ===========================
-    #  INIT OPENAI/AZURE CLIENT
-    # ===========================
     flag_openai = "openai" in o
     
 if flag_openai:
     emb_utils.init_openai_client(CREDENTIALS_FILE)
-    methos = ["openai"] + methods
+    methods = ["openai"] + methods
 
 # ===========================
 #  LOAD SONGS DATA
@@ -187,3 +185,71 @@ with open(os.path.join(OUTPUT_DIR, "word_matrices.pkl"), "wb") as f:
     pickle.dump(word_matrices, f)
 
 print(f"\n✅ All matrices computed and saved in '{OUTPUT_DIR}/'")
+
+
+correlation_matrices = {
+    "Full Text":text_matrices,
+    "Portion Based":portion_matrices,
+    "Topic Based":topic_matrices,
+    "Word Based":word_matrices
+}
+
+
+def show_matrix(matrix_npy, matrix_name, years, output_dir, show = False):
+    tick_labels = [year if int(year) % 5 == 0 else "" for year in years]
+    plt.figure(figsize=(8, 8))
+    ax = sns.heatmap(matrix_npy, cmap='coolwarm', vmin=0, vmax=1, cbar = False, xticklabels=tick_labels, yticklabels=tick_labels) #, cbar = True)
+    
+    
+    # Imposta i tick principali ogni 5 anni
+    major_ticks = [i + 0.5 for i, year in enumerate(years) if int(year) % 5 == 0]
+    minor_ticks = [i + 0.5 for i, year in enumerate(years) if int(year) % 5 != 0]
+    
+    ax.set_xticks(major_ticks)  
+    ax.set_xticklabels([year for year in years if int(year) % 5 == 0], fontsize=10)
+    
+    ax.set_yticks(major_ticks)
+    ax.set_yticklabels([year for year in years if int(year) % 5 == 0], fontsize=10)
+    
+    
+    ax.set_xticks(minor_ticks, minor=True)
+    ax.set_yticks(minor_ticks, minor=True)
+    
+    ax.tick_params(axis='both', which='major', length=5, width=2)  # Più grandi e spessi
+    
+    ax.tick_params(axis='both', which='minor', length=2, width=1)  # Più piccoli e sottili
+    
+    plt.title(matrix_name)
+    plt.savefig(f"{output_dir}/{matrix_name}.png", format="png", dpi=150)
+    if show == True:
+        plt.show()
+    plt.close()
+
+def mean_matrices(matrices):
+    return np.mean(np.array(matrices), axis=0).tolist()
+
+
+for method in correlation_matrices.keys():
+    folder_path = f"{OUTPUT_DIR}/{method}"
+    if not os.path.exists(folder_path):
+        os.mkdir(folder_path)
+    for model in correlation_matrices[method].keys():
+      for type_agg in correlation_matrices[method][model].keys():
+        show_matrix(correlation_matrices[method][model][type_agg], f"{method}_{model}_{type_agg}", years, f"{OUTPUT_DIR}/{method}", show = False)
+
+global_matrices = list()
+
+for method in correlation_matrices.keys():
+  folder_path = f"{OUTPUT_DIR}/{method}"
+  method_matrices = list()
+  if not os.path.exists(folder_path):
+      os.mkdir(folder_path)
+  for model in correlation_matrices[method].keys():
+    type_agg = "mean"
+    method_matrices.append(correlation_matrices[method][model][type_agg])
+  
+  show_matrix(mean_matrices(method_matrices), f"{method}_mean", years, f"{OUTPUT_DIR}/{method}", show = False)
+  global_matrices.append(method_matrices)
+
+show_matrix(mean_matrices(method_matrices), f"global_mean", years, f"{OUTPUT_DIR}", show = False)
+
