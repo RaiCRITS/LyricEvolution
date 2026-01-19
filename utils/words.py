@@ -4,14 +4,17 @@ import random
 from collections import Counter
 from itertools import combinations
 import numpy as np
+from tqdm import tqdm
 
 import spacy
 from sklearn.metrics.pairwise import cosine_similarity
 from langdetect import detect
 
 # =========================
-#  SPAcY MODEL LOADER (Large if available)
+#  CACHING DEI MODELLI
 # =========================
+
+# Mappa delle lingue ai modelli spaCy
 SPACY_LANGUAGE_MODELS = {
     "en": "en_core_web_lg",
     "it": "it_core_news_lg",
@@ -20,23 +23,34 @@ SPACY_LANGUAGE_MODELS = {
     "es": "es_core_news_lg",
     "pt": "pt_core_news_lg",
     "nl": "nl_core_news_lg",
-    "xx": "xx_ent_wiki_lg",  # multilingual large
+    "xx": "xx_ent_wiki_lg",
 }
 
+# Dizionario per memorizzare i modelli già caricati in RAM
+LOADED_MODELS = {}
+
+def get_nlp_model(lang):
+    """Carica il modello solo se non è già presente in cache."""
+    model_name = SPACY_LANGUAGE_MODELS.get(lang, "xx_ent_wiki_lg")
+    
+    if model_name not in LOADED_MODELS:
+        try:
+            print(f"--- Caricamento modello spaCy per lingua: {lang} ({model_name}) ---")
+            LOADED_MODELS[model_name] = spacy.load(model_name, disable=["parser", "ner"])
+        except OSError:
+            print(f"--- Download modello {model_name} in corso... ---")
+            os.system(f"python -m spacy download {model_name}")
+            LOADED_MODELS[model_name] = spacy.load(model_name, disable=["parser", "ner"])
+            
+    return LOADED_MODELS[model_name]
+
 def load_spacy_model_for_text(text):
+    """Rileva la lingua e restituisce il modello dalla cache."""
     try:
         lang = detect(text)
     except:
-        lang = "en"  # fallback
-
-    model_name = SPACY_LANGUAGE_MODELS.get(lang, "xx_ent_wiki_lg")
-    
-    try:
-        nlp = spacy.load(model_name, disable=["parser", "ner"])
-    except OSError:
-        os.system(f"python -m spacy download {model_name}")
-        nlp = spacy.load(model_name, disable=["parser", "ner"])
-    return nlp
+        lang = "en"
+    return get_nlp_model(lang)
 
 # =========================
 #  PREPROCESS
@@ -60,8 +74,8 @@ def compute_similarity_dict(text1, text2, text1n, text2n, nlp1, nlp2):
         "rep_norm": preprocess(text1n, nlp1, remove_duplicates=True),
     }
     variants2 = {
-        "no_rep_raw": preprocess(text2, nlp2, remove_duplicates=False, normalize=False),
-        "rep_raw": preprocess(text2, nlp2, remove_duplicates=True, normalize=False),
+        "no_rep_raw": preprocess(text2, nlp2, remove_duplicates=False),
+        "rep_raw": preprocess(text2, nlp2, remove_duplicates=True),
         "no_rep_norm": preprocess(text2n, nlp2, remove_duplicates=False),
         "rep_norm": preprocess(text2n, nlp2, remove_duplicates=True),
     }
@@ -79,7 +93,7 @@ def compute_similarity_dict(text1, text2, text1n, text2n, nlp1, nlp2):
 # =========================
 #  MATRIX BY YEAR
 # =========================
-def precompute_all_similarities(texts_by_year, api_key):
+def precompute_all_similarities(texts_by_year):
     similarities_all = {}
     titles = []
     texts = []
@@ -87,7 +101,8 @@ def precompute_all_similarities(texts_by_year, api_key):
 
     text_nlp = dict()
 
-    for year, entries in texts_by_year.items():
+    for year in tqdm(texts_by_year):
+        entries = texts_by_year[year]
         for e in entries:
             titles.append(e["title"]+" "+str(year))
             texts.append(e["text"])
@@ -128,7 +143,7 @@ def compute_matrix_by_year(texts_by_year, similarities_all, similarity_type="no_
                         sims.append(similarities_all[key][similarity_type])
             matrix[i, j] = func(sims) if sims else np.nan
 
-    return matrix, years
+    return matrix
 
 def compute_mean_matrix(texts_by_year, similarities_all, similarity_type="no_dup_raw", normalize=True):
     mean_matrix = compute_matrix_by_year(texts_by_year, similarities_all, similarity_type, func=np.mean)
