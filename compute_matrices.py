@@ -53,7 +53,7 @@ songs_by_year_topics = copy.deepcopy(songs_by_year_list)
 # Sostituire 'text' con 'topics' in tutti gli elementi
 for year, entries in songs_by_year_topics.items():
     for el in entries:
-        el['text'] = "\n".join(el['topics'])
+        el['text'] = "\n".join([t['topic_title'] for t in el['topics']])
 
 # ===========================
 #  FUNCTIONS TO COMPUTE MATRICES
