@@ -16,6 +16,8 @@ import pandas as pd
 # ========================
 client_openai = None
 
+OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+
 def init_openai_client(credentials_file="credentials.json"):
     """
     Initialize OpenAI or AzureOpenAI client from a JSON credentials file.
@@ -30,6 +32,9 @@ def init_openai_client(credentials_file="credentials.json"):
     api_key = creds.get("api_key")
     azure_endpoint = creds.get("azure_endpoint")
     api_version = creds.get("api_version")
+    emb_mod = creds.get("model_name")
+
+    global OPENAI_EMBEDDING_MODEL
 
     if azure_endpoint:
         print("🔹 Using AzureOpenAI")
@@ -38,7 +43,9 @@ def init_openai_client(credentials_file="credentials.json"):
             azure_endpoint=azure_endpoint,
             api_version=api_version
         )
+        OPENAI_EMBEDDING_MODEL = emb_mod
     else:
+        OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
         print("🔹 Using standard OpenAI")
         client_openai = OpenAI(api_key=api_key)
 
@@ -50,19 +57,25 @@ model_st = SentenceTransformer('intfloat/multilingual-e5-large')
 # ========================
 #  PRECOMPUTE EMBEDDINGS
 # ========================
-def precompute_all_embeddings(songs_by_year, method="openai", embedding_model="text-embedding-3-small", colbert_model="antoinelouis/colbert-xm"):
+def precompute_all_embeddings(songs_by_year, method="openai", colbert_model="antoinelouis/colbert-xm"):
     """
     Compute embeddings according to the selected method.
     - method: "openai" | "sentence_transformers" | "colbert"
     """
+    years = [int(k) for k in list(songs_by_year.keys())]
+    min_y = min(years)
+    max_y = max(years)
     if method == "openai":
+        global OPENAI_EMBEDDING_MODEL
+        embedding_model=OPENAI_EMBEDDING_MODEL
         if client_openai is None:
             raise RuntimeError("⚠️ You must first call init_openai_client() with a valid credentials file")
 
         embeddings_cache = {}
-        for year in tqdm(range(1951, 2026)):
-            year_str = str(year)
-            for el in songs_by_year.get(year_str, []):
+        
+        for year in tqdm(range(min_y, max_y+1)):
+            #year_str = str(year)
+            for el in songs_by_year.get(year, []):
                 response = client_openai.embeddings.create(
                     input=el['text'],
                     model=embedding_model
@@ -78,9 +91,8 @@ def precompute_all_embeddings(songs_by_year, method="openai", embedding_model="t
 
     elif method == "sentence_transformers":
         embeddings_cache = {}
-        for year in tqdm(range(1951, 2026)):
-            year_str = str(year)
-            for el in songs_by_year.get(year_str, []):
+        for year in tqdm(range(min_y, max_y+1)):
+            for el in songs_by_year.get(year, []):
                 embeddings_cache.setdefault(year, {"songs": [], "embeddings": []})
                 embeddings_cache[year]["songs"].append(el['song'])
                 embeddings_cache[year]["embeddings"].append(model_st.encode(el['text']))
@@ -94,9 +106,8 @@ def precompute_all_embeddings(songs_by_year, method="openai", embedding_model="t
         ckpt = Checkpoint(colbert_model, colbert_config=config)
 
         all_texts, years_list = [], []
-        for year in range(1951, 2026):
-            year_str = str(year)
-            year_texts = [el['text'] for el in songs_by_year.get(year_str, [])]
+        for year in range(min_y, max_y+1):
+            year_texts = [el['text'] for el in songs_by_year.get(year, [])]
             all_texts.extend(year_texts)
             years_list.extend([year] * len(year_texts))
 
@@ -106,11 +117,10 @@ def precompute_all_embeddings(songs_by_year, method="openai", embedding_model="t
         D_mask = D_mask.detach().cpu().numpy()
 
         embeddings_cache = {}
-        for year in range(1951, 2026):
-            year_str = str(year)
+        for year in range(min_y, max_y+1):
             indices = [i for i, y in enumerate(years_list) if y == year]
             embeddings_cache[year] = {
-                "songs": [el['song'] for el in songs_by_year.get(year_str, [])],
+                "songs": [el['song'] for el in songs_by_year.get(year, [])],
                 "embeddings": {
                     "D": D[indices],
                     "D_mask": D_mask[indices]
@@ -125,7 +135,7 @@ def precompute_all_embeddings(songs_by_year, method="openai", embedding_model="t
 # ========================
 #  SIMILARITY MATRIX
 # ========================
-def get_similarity_percentage(year1, year2, embeddings_dict, threshold, normalize=False, exclude_diagonal=True):
+def get_similarity_percentage(year1, year2, sim_years_values, threshold, normalize=False, exclude_diagonal=True):
     """
     Calculate the percentage of similarity scores above a given threshold 
     between items of two specified years.
@@ -156,11 +166,7 @@ def get_similarity_percentage(year1, year2, embeddings_dict, threshold, normaliz
     #year1 = str(year1)
     #year2 = str(year2)
     
-    similarity_matrix, labels1, labels2 = sim_matrix_years(
-        year1, year2, embeddings_dict, 
-        normalize=normalize, 
-        exclude_diagonal=exclude_diagonal
-    )
+    similarity_matrix = sim_years_values[(year1,year2)]
     
     # Mask valid (non-NaN) values
     valid_mask = ~np.isnan(similarity_matrix)
@@ -220,18 +226,30 @@ def sim_matrix_years(year1, year2, dict_emb_songs, normalize=False, exclude_diag
     return similarity_matrix, labels1, labels2
 
 
-def semantic_similarity_over_time_quartile(embeddings, years=range(1951, 2026), percentile_threshold=0.75):
-    """
-    Compute the year-by-year semantic similarity matrix using a quartile threshold.
-    Returns only the final matrix of percentages over the threshold.
-    """
-    all_values = []
+
+def get_sim_matrix_years_values(embeddings,years):
+    all_values = dict()
 
     # Step 1: collect all similarity values
     for y in tqdm(years, desc="Collecting similarity values"):
         for y2 in range(y, max(years)+1):
             sim_matrix, _, _ = sim_matrix_years(y, y2, embeddings, normalize=False, exclude_diagonal=y==y2)
-            all_values += sim_matrix.flatten().tolist()
+            all_values[(y,y2)] = sim_matrix
+    return all_values
+
+
+
+def semantic_similarity_over_time_quartile(sim_years_values, years, percentile_threshold=0.75):
+    """
+    Compute the year-by-year semantic similarity matrix using a quartile threshold.
+    Returns only the final matrix of percentages over the threshold.
+    """
+    
+
+    # Step 1: collect all similarity values
+    all_values = list()
+    for k in sim_years_values:
+      all_values += sim_years_values[k].flatten().tolist()
 
     # Step 2: compute threshold
     threshold_value = round(pd.Series(all_values).quantile(percentile_threshold), 5)
@@ -242,7 +260,7 @@ def semantic_similarity_over_time_quartile(embeddings, years=range(1951, 2026), 
         row = []
         for y2 in years:
             _, percentage = get_similarity_percentage(
-                y1, y2, embeddings, threshold=threshold_value, exclude_diagonal=y1==y2, normalize=False
+                y1, y2, sim_years_values, threshold=threshold_value, exclude_diagonal=y1==y2, normalize=False
             )
             row.append(percentage)
         over_threshold_matrix.append(row)
@@ -251,7 +269,7 @@ def semantic_similarity_over_time_quartile(embeddings, years=range(1951, 2026), 
 
 
 
-def semantic_similarity_over_time_mean(embeddings, years=range(1951, 2026), normalize=True):
+def semantic_similarity_over_time_mean(sim_years_values, years, normalize=True):
     """
     Compute the year-by-year mean semantic similarity matrix.
     - embeddings: dict con embeddings per anno
@@ -260,18 +278,10 @@ def semantic_similarity_over_time_mean(embeddings, years=range(1951, 2026), norm
     """
     mean_matrix = []
 
-    for y1 in tqdm(years, desc="Computing mean similarity per year"):
-        embeddings1 = embeddings[y1]['embeddings']
+    for y1 in tqdm(years, desc="Computing mean similarity per year"):        
         row = []
         for y2 in years:
-            embeddings2 = embeddings[y2]['embeddings']
-
-            if y1 != y2:
-                sim = np.mean(cosine_similarity(embeddings1, embeddings2))
-            else:
-                matrix = cosine_similarity(embeddings1, embeddings2)
-                np.fill_diagonal(matrix, np.nan)
-                sim = np.nanmean(matrix)
+            sim = np.nanmean(sim_years_values[y1,y2])    
             row.append(sim)
         mean_matrix.append(row)
 
@@ -283,7 +293,7 @@ def semantic_similarity_over_time_mean(embeddings, years=range(1951, 2026), norm
     return mean_matrix
 
 
-def semantic_similarity_over_time_median(embeddings, years=range(1951, 2026), normalize=True):
+def semantic_similarity_over_time_median(sim_years_values, years=range(1951, 2026), normalize=True):
     """
     Compute the year-by-year median semantic similarity matrix.
     - embeddings: dict con embeddings per anno
@@ -291,19 +301,10 @@ def semantic_similarity_over_time_median(embeddings, years=range(1951, 2026), no
     Returns only the final median similarity matrix.
     """
     median_matrix = []
-
-    for y1 in tqdm(years, desc="Computing median similarity per year"):
-        embeddings1 = embeddings[y1]['embeddings']
+    for y1 in tqdm(years, desc="Computing mean similarity per year"):        
         row = []
         for y2 in years:
-            embeddings2 = embeddings[y2]['embeddings']
-
-            if y1 != y2:
-                sim = np.median(cosine_similarity(embeddings1, embeddings2))
-            else:
-                matrix = cosine_similarity(embeddings1, embeddings2)
-                np.fill_diagonal(matrix, np.nan)
-                sim = np.nanmedian(matrix)
+            sim = np.nanmedian(sim_years_values[y1,y2])    
             row.append(sim)
         median_matrix.append(row)
 
