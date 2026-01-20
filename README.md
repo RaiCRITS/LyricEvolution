@@ -176,7 +176,6 @@ Where:
 
 The script will compute **pairwise semantic similarity matrices** according to the models and methods enabled by the provided credentials.
 
----
 
 ### Testing with Google Colab
 
