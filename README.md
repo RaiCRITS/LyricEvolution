@@ -1,12 +1,57 @@
 # Songs Semantic Analysis Framework
 This framework computes semantic similarity matrices of songs over years using multiple methods and models.
 
-## Pre-processing and Data Generation
-Before running the analysis, you need to prepare your dataset. The **topics** (titles and references), **segments** (lyric portions), and **normalized_text** (lemmatized text) can be automatically generated using the following notebook:
+## Dataset Preparation Overview
 
-👉 [**Songs Pre-processing Notebook (Google Colab)**](https://colab.research.google.com/drive/1xZpso5ChbBPlyt8gQw66fyvUVmIB_C89?usp=sharing)
+Before running the semantic analysis, your dataset must include structured song metadata and lyrics.  
+Additional semantic fields—such as topics, lyric segments, and normalized text—can be:
 
-Once the data is processed via the notebook, the resulting JSON file will be ready for the framework to proceed with the semantic analysis.
+- Automatically generated using the provided preprocessing notebook  
+- Manually curated and added by the user  
+
+## Automatic Pre-processing Pipeline
+
+The following notebook extracts topics, segments, and normalized text from raw lyrics:
+
+**Songs Pre-processing Notebook (Google Colab)**  
+https://colab.research.google.com/drive/1xZpso5ChbBPlyt8gQw66fyvUVmIB_C89?usp=sharing
+
+Running the notebook will enrich the dataset with:
+
+- `topics`
+- `segments`
+- `normalized_text`
+
+---
+
+## Example Dataset Files
+
+The repository provides ready-to-use examples demonstrating both dataset formats; **both examples contain fully synthetic (invented) data and are intended for illustrative and testing purposes only**.
+
+### Raw dataset (without semantic enrichment)
+```
+example_files/songs_data_without_topics_segments_norm.json
+```
+
+This version contains only basic metadata and lyrics.
+
+### Enriched dataset (after notebook processing)
+
+```
+example_files/songs_data_with_topics_segments_norm.json
+```
+
+This version includes automatically generated:
+
+- topics
+- lyric segments
+- normalized text
+
+These examples allow you to:
+
+- Compare before/after preprocessing
+- Manually edit or extend semantic annotations
+
 
 ## Songs JSON Format
 The dataset should be structured as a dictionary where **each key is a year** (as a string), and the value is a list of song entries for that year. Each song entry is a dictionary with the following fields:
@@ -74,20 +119,36 @@ The dataset should be structured as a dictionary where **each key is a year** (a
 
 ## Credentials JSON Format
 
-The framework requires a JSON file containing the OpenAI API keys for the services you want to use. The structure is as follows:
+The framework requires a JSON file containing the credentials needed to run the repository.
+
+### Mandatory Credentials
+
+A **Hugging Face token (`hf_token`) is required** in order to run the framework, as it is used to load embedding models and other core components.
 
 ```json
 {
+  "hf_token": "YOUR_HUGGINGFACE_TOKEN"
+}
+```
+### Optional OpenAI / Azure OpenAI Credentials
+
+OpenAI credentials are **optional** and are only required if you want to enable semantic similarity computations based on OpenAI models.
+
+#### Standard OpenAI configuration
+```json
+{
+  "hf_token": "YOUR_HUGGINGFACE_TOKEN",
   "openai": {
     "api_key": "YOUR_OPENAI_API_KEY"
   }
 }
 ```
 
-Note: The OpenAI API key can also be provided with Azure by specifying the API version and endpoint, for example:
+#### Azure OpenAI configuration
 
 ```json
 {
+  "hf_token": "YOUR_HUGGINGFACE_TOKEN",
   "openai": {
     "api_key": "YOUR_API_KEY",
     "api_version": "2024-06-01",
@@ -95,6 +156,3 @@ Note: The OpenAI API key can also be provided with Azure by specifying the API v
   }
 }
 ```
-
-> **Note on OpenAI:** If OpenAI credentials are not provided, the framework will still run. However, it will skip the specific semantic similarity calculations that depend on OpenAI models.
-
