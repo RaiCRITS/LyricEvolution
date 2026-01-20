@@ -22,7 +22,6 @@ Running the notebook will enrich the dataset with:
 - `segments`
 - `normalized_text`
 
----
 
 ## Example Dataset Files
 
@@ -156,3 +155,30 @@ OpenAI credentials are **optional** and are only required if you want to enable 
   }
 }
 ```
+
+## Running the Similarity Matrix Computation
+
+The computation of **pairwise semantic similarity matrices across years** can be performed by running the dedicated script from the command line.
+
+### Command-line execution
+
+```bash
+python compute_matrices.py \
+  --songs_file "{songs_json}" \
+  --credentials "{credentials_json}"
+```
+
+Where:  
+- `{songs_json}` is the path to the songs dataset JSON file (raw or enriched)  
+- `{credentials_json}` is the path to the credentials JSON file containing at least the mandatory `hf_token`  
+
+The script will compute **pairwise semantic similarity matrices** according to the models and methods enabled by the provided credentials.
+
+---
+
+### Testing with Google Colab
+
+For quick testing and experimentation, you can also run the pipeline to compute the final matrices and correlation figures using the provided Google Colab notebook:
+
+**Songs Similarity Computation Notebook (Google Colab)**  
+https://colab.research.google.com/drive/1K7bn0m59SdZK-IbEk77wl__PULTvfmZu?usp=sharing
